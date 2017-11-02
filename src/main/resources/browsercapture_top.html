@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BROWSER CAPTURE</title>
+    <style>
+        .center{
+            width: 400px;
+            text-align: center;
+            margin: auto;
+        }
+        footer{
+            margin-top: 50px;
+        }
+        input{
+            height: 30px;
+        }
+        .padding{
+            margin: 10px 0;
+            display: block;
+            content: "";
+        }
+    </style>
+</head>
+<body class="center">
+<div class="content">
+    <h1>BROWSER CAPTURE</h1>
+    <hr/>
+    <form action="/" method="get">
+        URL: <input name="url" type="url" title="URL"/>
+        <br />
+        URLs must start with http:// or https://, or error text will be displayed.
+        <br class="padding"/>
+        <input name="width" type="number" title="WIDTH" value="1920"/>
+        x
+        <input name="height" type="number" title="HEIGHT" value="1080"/>
+        <br class="padding"/>
+        <input name="submit" type="submit" value="CAPTURE"/>
+    </form>
+</div>
+<footer>
+    Source code: <a href="https://github.com/nao20010128nao/BrowserCapture">nao20010128nao/BrowserCapture</a><br/>
+    By <a href="https://github.com/nao20010128nao">nao20010128nao</a>
+</footer>
+</body>
+</html>
