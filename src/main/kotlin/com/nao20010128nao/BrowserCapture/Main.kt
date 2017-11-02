@@ -3,8 +3,14 @@ package com.nao20010128nao.BrowserCapture
 import com.google.common.io.ByteStreams
 import joptsimple.OptionParser
 import net.freeutils.httpserver.HTTPServer
+import java.util.*
 
 fun main(args:Array<String>) {
+    if(System.getProperty("os.name").toLowerCase(Locale.ENGLISH)!="linux"){
+        println("Non-Linux system is not supported.")
+        println("System.getProperty(\"os.name\") = ${System.getProperty("os.name")}")
+        System.exit(1)
+    }
     val optParam=OptionParser()
     optParam.accepts("port").withRequiredArg().defaultsTo("8080")
     val opt=optParam.parse(*args)
