@@ -20,6 +20,21 @@
             display: block;
             content: "";
         }
+        .screenshot#wrapper {
+            position: relative;
+            width: 100%;
+        }
+        .screenshot#wrapper:before {
+            content:"";
+            display: block;
+        }
+        .screenshot#content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body class="center">
@@ -37,7 +52,13 @@
         <br class="padding"/>
         <input name="submit" type="submit" value="CAPTURE"/>
     </form>
-</div>
+    <div class="screenshot" id="wrapper">
+        <iframe src="" class="screenshot chrome"></iframe>
+    </div>
+    <div class="screenshot" id="wrapper">
+        <iframe src="" class="screenshot firefox"></iframe>
+    </div>
+    </div>
 <footer>
     Source code: <a href="https://github.com/nao20010128nao/BrowserCapture">nao20010128nao/BrowserCapture</a><br/>
     By <a href="https://github.com/nao20010128nao">nao20010128nao</a>
