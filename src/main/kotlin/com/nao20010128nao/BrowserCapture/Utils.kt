@@ -1,5 +1,6 @@
 package com.nao20010128nao.BrowserCapture
 
+import java.io.File
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.*
@@ -21,3 +22,7 @@ fun Map<String,String>.toQuery():String = entries.joinToString("&") {
 }
 fun CharSequence.utf8Bytes():ByteArray=
         "$this".toByteArray(StandardCharsets.UTF_8)
+
+fun findInPath(name: String,requireExecutable: Boolean=true):File? = System.getenv("PATH").split(File.pathSeparator)
+        .map { File(it,name) }
+        .firstOrNull { it.exists()&&(if(requireExecutable) it.canExecute() else true) }

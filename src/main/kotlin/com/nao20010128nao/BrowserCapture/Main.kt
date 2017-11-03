@@ -1,9 +1,14 @@
 package com.nao20010128nao.BrowserCapture
 
+import com.google.common.io.ByteSink
 import com.google.common.io.ByteStreams
+import com.google.common.io.Files
 import joptsimple.OptionParser
 import net.freeutils.httpserver.HTTPServer
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.jsoup.Jsoup
+import org.openqa.selenium.Dimension
 import org.openqa.selenium.WebDriver
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.firefox.FirefoxOptions
@@ -15,9 +20,10 @@ import org.openqa.selenium.TakesScreenshot
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.chrome.ChromeOptions
 import org.openqa.selenium.firefox.FirefoxBinary
-
-
-
+import java.io.File
+import java.net.URL
+import java.util.zip.GZIPInputStream
+import java.util.zip.ZipInputStream
 
 
 fun main(args:Array<String>) {
@@ -27,6 +33,7 @@ fun main(args:Array<String>) {
         System.exit(1)
         return
     }
+    installWebDriverBinaries()
     val optParam=OptionParser()
     optParam.accepts("port").withRequiredArg().defaultsTo("8080")
     optParam.accepts("headless").withOptionalArg().defaultsTo("true")
@@ -43,9 +50,62 @@ fun main(args:Array<String>) {
     println("Server is ready")
 }
 
+fun installWebDriverBinaries(){
+    println("WebDriver binary is being detected or installed")
+    if(File("./chromedriver").let { it.exists()&&it.canExecute() }){
+        /* Check current directory */
+        System.setProperty("webdriver.chrome.driver",File("./chromedriver").absolutePath)
+    }else if(findInPath("chromedriver",true)!=null){
+        /* Check $PATH */
+        System.setProperty("webdriver.chrome.driver",findInPath("chromedriver",true)!!.absolutePath)
+    }else{
+        /* Download into tmp directory */
+        URL("http://chromedriver.storage.googleapis.com/2.29/chromedriver_linux64.zip").openStream().use {
+            ZipInputStream(it).use { tar ->
+                while(true){
+                    val entry= tar.nextEntry ?: break
+                    if(entry.name=="chromedriver"){
+                        val file=File.createTempFile("browser","capture")
+                        file.outputStream().use {
+                            ByteStreams.copy(tar,it)
+                        }
+                        file.setExecutable(true)
+                        System.setProperty("webdriver.chrome.driver",file.absolutePath)
+                    }
+                }
+            }
+        }
+    }
+    if(File("./geckodriver").let { it.exists()&&it.canExecute() }){
+        /* Check current directory */
+        System.setProperty("webdriver.gecko.driver",File("./geckodriver").absolutePath)
+    }else if(findInPath("geckodriver",true)!=null){
+        /* Check $PATH */
+        System.setProperty("webdriver.gecko.driver",findInPath("geckodriver",true)!!.absolutePath)
+    }else{
+        /* Download into tmp directory */
+        GZIPInputStream(URL("https://github.com/mozilla/geckodriver/releases/download/v0.19.1/geckodriver-v0.19.1-linux64.tar.gz").openStream()).use {
+            TarArchiveInputStream(it).use { tar ->
+                while(true){
+                    val entry= tar.nextTarEntry ?: break
+                    if(entry.name=="geckodriver"){
+                        val file=File.createTempFile("browser","capture")
+                        file.outputStream().use {
+                            ByteStreams.copy(tar,it)
+                        }
+                        file.setExecutable(true)
+                        System.setProperty("webdriver.gecko.driver",file.absolutePath)
+                    }
+                }
+            }
+        }
+    }
+    println("Set \"webdriver.chrome.driver\" to ${System.getProperty("webdriver.chrome.driver")}")
+    println("Set \"webdriver.gecko.driver\" to ${System.getProperty("webdriver.gecko.driver")}")
+}
+
 class TopPage : ContextHandler{
     override fun onRequest(req: HTTPServer.Request, resp: HTTPServer.Response): Int {
-        println(req.rawUri)
         resp.sendHeaders(200)
         val doc=Jsoup.parse(openHtml("top"),"utf-8","")
         val content=parseRequestedImage(req)
@@ -97,26 +157,30 @@ class DynamicCss: ContextHandler{
 }
 
 class Chrome(private val headless:Boolean) : BrowserBase(){
-    override fun startBrowser(): WebDriver {
+    override fun startBrowser(width:Int,height:Int): WebDriver {
         val options=ChromeOptions()
-        if(headless){
+        if(headless) {
             options.addArguments("--headless")
         }
-        return ChromeDriver(options)
+        return ChromeDriver(options).also {
+            it.manage().window().size = Dimension(width, height)
+        }
     }
 
     override val path: String
         get() = "chrome"
 }
 class Firefox(private val headless:Boolean) : BrowserBase(){
-    override fun startBrowser(): WebDriver {
+    override fun startBrowser(width:Int,height:Int): WebDriver {
         val options=FirefoxOptions()
         val firefoxBinary = FirefoxBinary()
         if(headless){
             firefoxBinary.addCommandLineOptions("--headless")
         }
         options.binary=firefoxBinary
-        return FirefoxDriver(options)
+        return FirefoxDriver(options).also {
+            it.manage().window().size = Dimension(width, height+73)
+        }
     }
 
     override val path: String
@@ -149,15 +213,15 @@ abstract class BrowserBase: ContextHandler{
             /* Queue the request and redirect */
             val ss=Screenshot(url,width,height)
             cache.add(ss)
-            take(ss, startBrowser())
+            take(ss, startBrowser(width, height))
             resp.redirect("/$path?${req.params.addRandQuery().toQuery()}",false)
             return 0
         }
         val image= cache.find(url, width, height)!!.image
         if(image==null){
             /* Redirect for next chance */
-            val ss=Screenshot(url,width,height)
-            cache.add(ss)
+            /* Stop for a while to wait */
+            Thread.sleep(4000)
             resp.redirect("/$path?${req.params.addRandQuery().toQuery()}",false)
         }else{
             /* Screenshot is taken, so send it */
@@ -168,7 +232,7 @@ abstract class BrowserBase: ContextHandler{
         return 0
     }
 
-    abstract fun startBrowser():WebDriver
+    abstract fun startBrowser(width:Int,height:Int):WebDriver
     abstract val path:String
 }
 
@@ -179,6 +243,7 @@ data class Screenshot(val url:String,val width:Int,val height:Int){
 
 interface ContextHandler:HTTPServer.ContextHandler{
     override fun serve(p0: HTTPServer.Request, p1: HTTPServer.Response): Int {
+        println(p0.rawUri)
         try {
             return onRequest(p0,p1)
         }catch (e:Throwable){
@@ -207,12 +272,15 @@ fun parseRequestedImage(req: HTTPServer.Request):Triple<String,Int,Int>?{
 fun take(ss:Screenshot,driver:WebDriver){
     ss.image =null
     Thread({
-        driver.get(ss.url)
-        /* Wait for 20 seconds to render */
-        Thread.sleep(1000*20)
-        /* Take screenshot */
-        ss.image=(driver as TakesScreenshot).getScreenshotAs(OutputType.BASE64)
-        /* Close browser */
-        driver.close()
+        try {
+            driver.get(ss.url)
+            /* Wait for 20 seconds to render */
+            Thread.sleep(1000*20)
+            /* Take screenshot */
+            ss.image=(driver as TakesScreenshot).getScreenshotAs(OutputType.BASE64)
+        }finally {
+            /* Close browser */
+            driver.close()
+        }
     }).start()
 }
