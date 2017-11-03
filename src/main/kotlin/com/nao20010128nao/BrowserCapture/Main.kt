@@ -22,6 +22,9 @@ import org.openqa.selenium.chrome.ChromeOptions
 import org.openqa.selenium.firefox.FirefoxBinary
 import java.io.File
 import java.net.URL
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.ThreadPoolExecutor
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
 
@@ -213,7 +216,7 @@ abstract class BrowserBase: ContextHandler{
             /* Queue the request and redirect */
             val ss=Screenshot(url,width,height)
             cache.add(ss)
-            take(ss, startBrowser(width, height))
+            take(ss, {startBrowser(width, height)}, {cache.remove(ss)})
             resp.redirect("/$path?${req.params.addRandQuery().toQuery()}",false)
             return 0
         }
@@ -269,18 +272,25 @@ fun parseRequestedImage(req: HTTPServer.Request):Triple<String,Int,Int>?{
         Triple(params["url"]!!,params["width"]!!.toInt(),params["height"]!!.toInt())
 }
 
-fun take(ss:Screenshot,driver:WebDriver){
+val executor: ExecutorService =Executors.newFixedThreadPool(5)
+
+fun take(ss:Screenshot,driverFactory:()->WebDriver,reject:()->Unit){
     ss.image =null
-    Thread({
-        try {
-            driver.get(ss.url)
-            /* Wait for 20 seconds to render */
-            Thread.sleep(1000*20)
-            /* Take screenshot */
-            ss.image=(driver as TakesScreenshot).getScreenshotAs(OutputType.BASE64)
-        }finally {
-            /* Close browser */
-            driver.close()
+    executor.submit({
+        (0..4).forEach {
+            val driver=driverFactory()
+            try {
+                driver.get(ss.url)
+                /* Wait for 20 seconds to render */
+                Thread.sleep(1000*20)
+                /* Take screenshot */
+                ss.image=(driver as TakesScreenshot).getScreenshotAs(OutputType.BASE64)
+                return@submit
+            }finally {
+                /* Close browser */
+                driver.close()
+            }
         }
-    }).start()
+        reject()
+    })
 }

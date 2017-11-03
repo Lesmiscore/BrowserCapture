@@ -35,6 +35,7 @@
             width: 100%;
             height: 100%;
         }
+
     </style>
 </head>
 <body class="center">
@@ -43,7 +44,7 @@
     <hr/>
     <form action="/" method="get">
         URL: <input name="url" type="url" title="URL"/>
-        <br />
+        <br/>
         URLs must start with http:// or https://, or error text will be displayed.
         <br class="padding"/>
         <input name="width" type="number" title="WIDTH" value="1920"/>
@@ -52,17 +53,18 @@
         <br class="padding"/>
         <input name="submit" type="submit" value="CAPTURE"/>
     </form>
+    <p>Please reload this page if you see errors.</p>
     <hr/>
     <p>Chrome</p>
     <div class="screenshot" id="wrapper">
         <iframe src="" class="screenshot chrome"></iframe>
     </div>
-    <hr/>
     <p>Firefox</p>
     <div class="screenshot" id="wrapper">
         <iframe src="" class="screenshot firefox"></iframe>
     </div>
-    </div>
+</div>
+<hr/>
 <footer>
     Source code: <a href="https://github.com/nao20010128nao/BrowserCapture">nao20010128nao/BrowserCapture</a><br/>
     By <a href="https://github.com/nao20010128nao">nao20010128nao</a>
