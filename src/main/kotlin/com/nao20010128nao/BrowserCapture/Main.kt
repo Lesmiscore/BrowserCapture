@@ -1,32 +1,30 @@
 package com.nao20010128nao.BrowserCapture
 
-import com.google.common.io.ByteSink
 import com.google.common.io.ByteStreams
-import com.google.common.io.Files
 import joptsimple.OptionParser
 import net.freeutils.httpserver.HTTPServer
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream
 import org.jsoup.Jsoup
 import org.openqa.selenium.Dimension
-import org.openqa.selenium.WebDriver
-import org.openqa.selenium.firefox.FirefoxDriver
-import org.openqa.selenium.firefox.FirefoxOptions
-import java.io.InputStream
-import java.nio.charset.StandardCharsets
-import java.util.*
 import org.openqa.selenium.OutputType
 import org.openqa.selenium.TakesScreenshot
+import org.openqa.selenium.WebDriver
 import org.openqa.selenium.chrome.ChromeDriver
 import org.openqa.selenium.chrome.ChromeOptions
 import org.openqa.selenium.firefox.FirefoxBinary
+import org.openqa.selenium.firefox.FirefoxDriver
+import org.openqa.selenium.firefox.FirefoxOptions
+import java.awt.Toolkit
 import java.io.File
+import java.io.InputStream
 import java.net.URL
+import java.nio.charset.StandardCharsets
+import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
-import java.util.concurrent.ThreadPoolExecutor
 import java.util.zip.GZIPInputStream
 import java.util.zip.ZipInputStream
+import javax.imageio.ImageIO
 
 
 fun main(args:Array<String>) {
@@ -73,6 +71,7 @@ fun installWebDriverBinaries(){
                             ByteStreams.copy(tar,it)
                         }
                         file.setExecutable(true)
+                        file.deleteOnExit()
                         System.setProperty("webdriver.chrome.driver",file.absolutePath)
                     }
                 }
@@ -97,6 +96,7 @@ fun installWebDriverBinaries(){
                             ByteStreams.copy(tar,it)
                         }
                         file.setExecutable(true)
+                        file.deleteOnExit()
                         System.setProperty("webdriver.gecko.driver",file.absolutePath)
                     }
                 }
@@ -149,9 +149,9 @@ class DynamicCss: ContextHandler{
             }
         }
         if(path.startsWith("image-")){
-            val (width,height)=path.split("-").drop(1).map { it.toInt() }
+            val (width,height)=path.split("-").drop(1).map { it.toDouble() }
             resp.sendHeaders(200)
-            resp.body.write(".screenshot#wrapper:before { padding-top: ${height/width*100}%; }".utf8Bytes())
+            //resp.body.write(".screenshot#wrapper:before { padding-top: ${width*100/height}%; }".utf8Bytes())
             return 0
         }
         resp.sendHeaders(404)
@@ -182,9 +182,12 @@ class Firefox(private val headless:Boolean) : BrowserBase(){
         }
         options.binary=firefoxBinary
         return FirefoxDriver(options).also {
-            it.manage().window().size = Dimension(width, height+73)
+            it.manage().window().size = Dimension(width, height)
         }
     }
+
+    /* Use hard-coded value because Firefox's screenshot returns with wrong size */
+    override fun margins(): Pair<Int, Int> = 0 to 37
 
     override val path: String
         get() = "firefox"
@@ -193,6 +196,12 @@ class Firefox(private val headless:Boolean) : BrowserBase(){
 
 abstract class BrowserBase: ContextHandler{
     val cache: Screenshots = HashSet()
+    val margins:Pair<Int,Int>
+
+    init{
+        margins=margins()
+        println("Margins for $path: ${margins.first}x${margins.second}")
+    }
 
     override fun onRequest(req: HTTPServer.Request, resp: HTTPServer.Response): Int {
         if(req.params.isEmpty()){
@@ -216,16 +225,14 @@ abstract class BrowserBase: ContextHandler{
             /* Queue the request and redirect */
             val ss=Screenshot(url,width,height)
             cache.add(ss)
-            take(ss, {startBrowser(width, height)}, {cache.remove(ss)})
-            resp.redirect("/$path?${req.params.addRandQuery().toQuery()}",false)
+            take(ss, {startBrowser(width+margins.first, height+margins.second)}, {cache.remove(ss)})
+            reopenPage(req, resp)
             return 0
         }
         val image= cache.find(url, width, height)!!.image
         if(image==null){
             /* Redirect for next chance */
-            /* Stop for a while to wait */
-            Thread.sleep(4000)
-            resp.redirect("/$path?${req.params.addRandQuery().toQuery()}",false)
+            reopenPage(req, resp)
         }else{
             /* Screenshot is taken, so send it */
             val bytes=Base64.getDecoder().decode(image)
@@ -235,8 +242,34 @@ abstract class BrowserBase: ContextHandler{
         return 0
     }
 
+    fun reopenPage(req: HTTPServer.Request, resp: HTTPServer.Response) {
+        /*Thread.sleep(4000)
+        resp.redirect("/$path?${req.params.addRandQuery().toQuery()}",false)*/
+        resp.sendHeaders(200)
+        val doc=Jsoup.parse(openHtml("image_redirect"),"utf-8","")!!
+        doc.head().appendElement("meta").also {
+            it.attr("http-equiv", "refresh")
+            it.attr("content", "4;url=/$path?${req.params.addRandQuery().toQuery()}")
+        }
+        //println(doc.html())
+        resp.body.write(doc.html().utf8Bytes())
+    }
     abstract fun startBrowser(width:Int,height:Int):WebDriver
     abstract val path:String
+    open fun margins(): Pair<Int,Int>{
+        val (width,height)=800 to 600
+        val driver=startBrowser(width,height)
+        Thread.sleep(2*1000)
+        driver.get("https://google.com/")
+        Thread.sleep(5*1000)
+        try {
+            val ss=(driver as TakesScreenshot).getScreenshotAs(OutputType.BYTES)
+            val image= ImageIO.read(ss.inputStream())!!
+            return Pair(width-image.width,height-image.height)
+        }finally {
+            driver.close()
+        }
+    }
 }
 
 data class Screenshot(val url:String,val width:Int,val height:Int){
@@ -280,16 +313,20 @@ fun take(ss:Screenshot,driverFactory:()->WebDriver,reject:()->Unit){
         (0..4).forEach {
             val driver=driverFactory()
             try {
+                println("${ss.url}: Opening")
                 driver.get(ss.url)
                 /* Wait for 20 seconds to render */
+                println("${ss.url}: Waiting for render")
                 Thread.sleep(1000*20)
                 /* Take screenshot */
+                println("${ss.url}: Getting image")
                 ss.image=(driver as TakesScreenshot).getScreenshotAs(OutputType.BASE64)
                 return@submit
             }catch(e: Throwable){
                 e.printStackTrace()
             }finally {
                 /* Close browser */
+                println("${ss.url}: Closing browser")
                 driver.close()
             }
         }
