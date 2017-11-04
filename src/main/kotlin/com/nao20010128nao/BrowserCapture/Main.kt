@@ -286,6 +286,8 @@ fun take(ss:Screenshot,driverFactory:()->WebDriver,reject:()->Unit){
                 /* Take screenshot */
                 ss.image=(driver as TakesScreenshot).getScreenshotAs(OutputType.BASE64)
                 return@submit
+            }catch(e: Throwable){
+                e.printStackTrace()
             }finally {
                 /* Close browser */
                 driver.close()
