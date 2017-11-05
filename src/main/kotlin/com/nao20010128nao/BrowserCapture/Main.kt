@@ -14,7 +14,6 @@ import org.openqa.selenium.chrome.ChromeOptions
 import org.openqa.selenium.firefox.FirefoxBinary
 import org.openqa.selenium.firefox.FirefoxDriver
 import org.openqa.selenium.firefox.FirefoxOptions
-import java.awt.Toolkit
 import java.io.File
 import java.io.InputStream
 import java.net.URL
